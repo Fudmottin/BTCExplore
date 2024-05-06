@@ -10,6 +10,7 @@ public:
 
     std::string rpc_url = "http://127.0.0.1:8332";
     std::string cookie_file_path;
+    int port = 2024;
 
 private:
     void loadConfigFile(const std::string& filePath);
