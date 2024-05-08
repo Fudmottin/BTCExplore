@@ -1,11 +1,24 @@
 #include <boost/asio.hpp>
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <cppcodec/base64_default_rfc4648.hpp>
 #include "configfile.h"
 
 namespace asio = boost::asio;
 using boost::system::error_code;
 using asio::ip::tcp;
+
+std::string read_cookie_file(const std::string& filepath) {
+    std::ifstream file(filepath);
+    if (!file) {
+        std::cerr << "Error opening cookie file: " << filepath << std::endl;
+        return "";
+    }
+    std::string line;
+    std::getline(file, line);
+    return cppcodec::base64_rfc4648::encode(line);
+}
 
 void handle_request(tcp::socket& socket) {
     asio::streambuf request;
@@ -28,9 +41,9 @@ void start_server(asio::io_context& io_context, unsigned short port) {
         tcp::socket socket(io_context);
         acceptor.accept(socket);
 
-        std::async(std::launch::async, [socket = std::move(socket)]() mutable {
-            handle_request(socket);
-        });
+        auto future = std::async(std::launch::async, [socket = std::move(socket)]() mutable {
+                                 handle_request(socket);
+                                 });
     }
 }
 
@@ -51,9 +64,10 @@ int main(int argc, char* argv[]) {
     // Access properties of configFile as needed
     std::cerr << "rpc_url: " << configFile.rpc_url << std::endl;
     std::cerr << "cookie_file_path: " << configFile.cookie_file_path << std::endl;
+    std::cerr << "port: " << configFile.port << std::endl;
 
     // Start the server using io_context
-    start_server(io_context, 2024);
+    start_server(io_context, configFile.port);
 
     // Run the io_context
     io_context.run();
