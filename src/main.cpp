@@ -1,32 +1,41 @@
-#include <boost/asio.hpp>
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <future>
+#include <boost/beast.hpp>
 #include "configfile.h"
 #include "btcclient.h"
 
-namespace asio = boost::asio;
-using boost::system::error_code;
-using asio::ip::tcp;
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace net = boost::asio;
+using tcp = net::ip::tcp;
 
 void handle_request(tcp::socket& socket, const ConfigFile& config) {
-    asio::streambuf request;
-    asio::read_until(socket, request, "\r\n\r\n");
+    beast::flat_buffer buffer;
+    http::request<http::string_body> req;
+    http::read(socket, buffer, req);
+
     BTCClient client(config.rpc_url, std::to_string(config.rpc_port), config.auth);
 
-    auto data = client.make_request("getblockchaininfo");
+    std::vector<std::pair<std::string, nlohmann::json>> requests = {
+        {"getblockchaininfo", nullptr},
+        {"getmempoolinfo", nullptr},
+        {"getnetworkinfo", nullptr}
+    };
 
-    // Construct the HTTP response with the JSON data
-    std::string response =          
-        "HTTP/1.1 200 OK\r\n"       
-        "Content-Length: " + std::to_string(data.dump().length()) + "\r\n"    
-        "Content-Type: application/json\r\n\r\n" +
-        data.dump() + "\r\n";        
+    auto data = client.make_request(requests);
 
-    asio::write(socket, asio::buffer(response));
+    http::response<http::string_body> res{http::status::ok, req.version()};
+    res.set(http::field::server, "BTCExplore");
+    res.set(http::field::content_type, "application/json");
+    res.body() = data.dump();
+    res.prepare_payload();
+
+    http::write(socket, res);
 }
 
-void start_server(asio::io_context& io_context, const ConfigFile& config) {
+void start_server(net::io_context& io_context, const ConfigFile& config) {
     tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), config.port));
 
     while (true) {
