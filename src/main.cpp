@@ -2,47 +2,40 @@
 #include <iostream>
 #include <string>
 #include <fstream>
-#include <cppcodec/base64_default_rfc4648.hpp>
 #include "configfile.h"
+#include "btcclient.h"
 
 namespace asio = boost::asio;
 using boost::system::error_code;
 using asio::ip::tcp;
 
-std::string read_cookie_file(const std::string& filepath) {
-    std::ifstream file(filepath);
-    if (!file) {
-        std::cerr << "Error opening cookie file: " << filepath << std::endl;
-        return "";
-    }
-    std::string line;
-    std::getline(file, line);
-    return cppcodec::base64_rfc4648::encode(line);
-}
-
-void handle_request(tcp::socket& socket) {
+void handle_request(tcp::socket& socket, const ConfigFile& config) {
     asio::streambuf request;
     asio::read_until(socket, request, "\r\n\r\n");
+    BTCClient client(config.rpc_url, std::to_string(config.rpc_port), config.auth);
 
-    // Respond with a simple HTTP message
-    std::string response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Length: 13\r\n"
-        "Content-Type: text/plain\r\n\r\n"
-        "Hello, World!\r\n";
+    auto data = client.make_request("getblockchaininfo");
+
+    // Construct the HTTP response with the JSON data
+    std::string response =          
+        "HTTP/1.1 200 OK\r\n"       
+        "Content-Length: " + std::to_string(data.dump().length()) + "\r\n"    
+        "Content-Type: application/json\r\n\r\n" +
+        data.dump() + "\r\n";        
 
     asio::write(socket, asio::buffer(response));
 }
 
-void start_server(asio::io_context& io_context, unsigned short port) {
-    tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
+void start_server(asio::io_context& io_context, const ConfigFile& config) {
+    tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), config.port));
 
     while (true) {
         tcp::socket socket(io_context);
         acceptor.accept(socket);
 
-        auto future = std::async(std::launch::async, [socket = std::move(socket)]() mutable {
-                                 handle_request(socket);
+        auto future = std::async(std::launch::async, [socket = std::move(socket),
+                                                      config = config]() mutable {
+                                 handle_request(socket, config);
                                  });
     }
 }
@@ -63,11 +56,12 @@ int main(int argc, char* argv[]) {
 
     // Access properties of configFile as needed
     std::cerr << "rpc_url: " << configFile.rpc_url << std::endl;
+    std::cerr << "rpc_port: " << configFile.rpc_port << std::endl;
     std::cerr << "cookie_file_path: " << configFile.cookie_file_path << std::endl;
     std::cerr << "port: " << configFile.port << std::endl;
 
     // Start the server using io_context
-    start_server(io_context, configFile.port);
+    start_server(io_context, configFile);
 
     // Run the io_context
     io_context.run();

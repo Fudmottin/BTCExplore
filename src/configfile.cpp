@@ -1,12 +1,22 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <cppcodec/base64_default_rfc4648.hpp>
 #include "configfile.h"
-
-ConfigFile::ConfigFile() {}
 
 ConfigFile::ConfigFile(const std::string& filePath) {
     loadConfigFile(filePath);
+}
+
+std::string ConfigFile::read_cookie_file(const std::string& filepath) {
+    std::ifstream file(filepath);
+    if (!file) {
+        std::cerr << "Error opening cookie file: " << filepath << std::endl;
+        return "";
+    }
+    std::string line;
+    std::getline(file, line);
+    return cppcodec::base64_rfc4648::encode(line);
 }
 
 void ConfigFile::loadConfigFile(const std::string& filePath) {
@@ -40,6 +50,15 @@ void ConfigFile::loadConfigFile(const std::string& filePath) {
 
             if (key == "rpcurl") {
                 rpc_url = value;
+            } else if (key == "rpcport") {
+                // Assuming port is an integer
+                try {
+                    rpc_port = std::stoi(value);
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Invalid port value: " << value << std::endl;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Port value out of range: " << value << std::endl;
+                }
             } else if (key == "cookie") {
                 cookie_file_path = value;
             } else if (key == "port") {
@@ -56,7 +75,7 @@ void ConfigFile::loadConfigFile(const std::string& filePath) {
             }
         }
     }
-
     file.close();
+    auth = read_cookie_file(cookie_file_path);
 }
 
