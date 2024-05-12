@@ -5,13 +5,14 @@
 #include <nlohmann/json.hpp>
 
 namespace net = boost::asio;
+namespace http = boost::beast::http;
 using tcp = net::ip::tcp;
 
 class BTCServer {
 public:
     BTCServer() = delete;
     BTCServer(tcp::socket socket) : socket_(std::move(socket)) {};
-    nlohmann::json read_request();
+    http::request<http::string_body> read_request();
     void write_response(const nlohmann::json& data);
 
 private:

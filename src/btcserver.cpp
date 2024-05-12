@@ -10,9 +10,10 @@ namespace net = boost::asio;
 using tcp = net::ip::tcp;
 using nlohmann::json;
 
-nlohmann::json BTCServer::read_request() {
+http::request<http::string_body> BTCServer::read_request() {
     beast::flat_buffer buffer;
     http::request<http::string_body> req;
+
     http::read(socket_, buffer, req);
 
     // Dump request information
@@ -22,7 +23,7 @@ nlohmann::json BTCServer::read_request() {
         std::cerr << "Header: " << header.name_string() << " = " << header.value() << std::endl;
     }
 
-    return nlohmann::json();
+    return req;
 }
 
 void BTCServer::write_response(const nlohmann::json& data) {
