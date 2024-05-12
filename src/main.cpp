@@ -5,6 +5,7 @@
 #include <boost/beast.hpp>
 #include "configfile.h"
 #include "btcclient.h"
+#include "btcserver.h"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -12,11 +13,10 @@ namespace net = boost::asio;
 using tcp = net::ip::tcp;
 
 void handle_request(tcp::socket& socket, const ConfigFile& config) {
-    beast::flat_buffer buffer;
-    http::request<http::string_body> req;
-    http::read(socket, buffer, req);
-
+    BTCServer server(std::move(socket));
     BTCClient client(config.rpc_url, std::to_string(config.rpc_port), config.auth);
+
+    auto req = server.read_request();
 
     std::vector<std::pair<std::string, nlohmann::json>> requests = {
         {"getblockchaininfo", nullptr},
@@ -25,14 +25,7 @@ void handle_request(tcp::socket& socket, const ConfigFile& config) {
     };
 
     auto data = client.make_request(requests);
-
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, "BTCExplore");
-    res.set(http::field::content_type, "application/json");
-    res.body() = data.dump();
-    res.prepare_payload();
-
-    http::write(socket, res);
+    server.write_response(data);
 }
 
 void start_server(net::io_context& io_context, const ConfigFile& config) {
