@@ -1,6 +1,7 @@
 #ifndef BTCSERVER_H
 #define BTCSERVER_H
 
+#include <string>
 #include <boost/beast.hpp>
 #include <nlohmann/json.hpp>
 
@@ -13,7 +14,7 @@ public:
     BTCServer() = delete;
     BTCServer(tcp::socket socket) : socket_(std::move(socket)) {};
     http::request<http::string_body> read_request();
-    void write_response(const nlohmann::json& data);
+    void write_response(const std::string& fileType, const std::string& data);
 
 private:
     tcp::socket socket_;
