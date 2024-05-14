@@ -23,4 +23,3 @@ CMakeLists.txt.user
 
 # Ignore macOS system files
 .DS_Store
-
