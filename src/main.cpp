@@ -25,7 +25,7 @@ void handle_request(tcp::socket& socket, const ConfigFile& config) {
     };
 
     auto data = client.make_request(requests);
-    server.write_response(std::string("json"), data.dump());
+    server.write_response<json>(data.dump());
 }
 
 void start_server(net::io_context& io_context, const ConfigFile& config) {
