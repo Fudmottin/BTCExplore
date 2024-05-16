@@ -2,7 +2,9 @@
 #include <string>
 #include <fstream>
 #include <future>
+#include <boost/beast/core.hpp>
 #include <boost/beast.hpp>
+#include <boost/beast/websocket.hpp>
 #include "configfile.h"
 #include "btcclient.h"
 #include "btcserver.h"
@@ -10,22 +12,56 @@
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
+namespace websocket = beast::websocket;
 using tcp = net::ip::tcp;
 
 void handle_request(tcp::socket& socket, const ConfigFile& config) {
-    BTCServer server(std::move(socket));
-    BTCClient client(config.rpc_url, std::to_string(config.rpc_port), config.auth);
+    try {
+        BTCServer server(std::move(socket));
+        BTCClient client(config.rpc_url, std::to_string(config.rpc_port), config.auth);
 
-    auto req = server.read_request();
+        auto req = server.read_request();
 
-    std::vector<std::pair<std::string, nlohmann::json>> requests = {
-        {"getblockchaininfo", nullptr},
-        {"getmempoolinfo", nullptr},
-        {"getnetworkinfo", nullptr}
-    };
+        // Dump request information
+        std::cerr << "Request Method: " << req.method_string() << std::endl;
+        std::cerr << "Request Target: " << req.target() << std::endl;
+        for (const auto& header : req) {
+            std::cerr << "Header: " << header.name_string() << " = " << header.value() << std::endl;
+        }
 
-    auto data = client.make_request(requests);
-    server.write_response<json>(data.dump());
+
+        if (websocket::is_upgrade(req)) {
+            auto ws = server.upgrade_to_websocket(req);
+
+            nlohmann::json initial_data = client.make_request({{"getblockchaininfo", nullptr}});
+            ws.text(true);
+            ws.write(net::buffer(initial_data.dump()));
+
+            while (true) {
+                beast::flat_buffer ws_buffer;
+                ws.read(ws_buffer);
+                // Process incoming WebSocket messages
+                // For example, you could handle specific WebSocket messages here
+                // and send responses back to the client
+            }
+        } else {
+            if (req.method() == http::verb::get && req.target() == "/") {
+                std::vector<std::pair<std::string, nlohmann::json>> requests = {
+                    {"getblockchaininfo", nullptr},
+                    {"getmempoolinfo", nullptr},
+                    {"getnetworkinfo", nullptr}
+                };
+
+                auto data = client.make_request(requests);
+                server.write_response<json>(data.dump());
+            } else {
+                server.write_not_found();
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        // Optionally send an error response to the client
+    }
 }
 
 void start_server(net::io_context& io_context, const ConfigFile& config) {
